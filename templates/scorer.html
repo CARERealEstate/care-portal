@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Risk Scorer â CARE Portal{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="card">
+    <h2>Risk Assessment Scorer</h2>
+    <p style="color:var(--muted);margin-bottom:1.5rem;">Select all risk factors that apply from the assessment, choose historic or recent for each, then answer the property questions below.</p>
+
+    <form id="scorerForm">
+      <!-- Property questions -->
+      <div class="card" style="background:#f8f9fa;box-shadow:none;padding:1.2rem 1.5rem;">
+        <h2 style="font-size:1.1rem;">Property Details</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Client Name</label>
+            <input type="text" id="clientName" placeholder="e.g. John Smith" style="width:200px;">
+          </div>
+          <div class="form-group">
+            <label>How many bedrooms?</label>
+            <select id="propertyType">
+              <option value="HMO">HMO</option>
+              <option value="1 Bed">1 Bed</option>
+              <option value="2 Bed" selected>2 Bed</option>
+              <option value="3 Bed">3 Bed</option>
+              <option value="4 Bed">4 Bed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bills included?</label>
+            <select id="billsIncluded">
+              <option value="no">No</option>
+              <option value="yes">Yes (+&pound;15/night)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Double-manned visits?</label>
+            <select id="doubleManned">
+              <option value="no">No (single-manned)</option>
+              <option value="yes">Yes (double-manned)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk factors by category -->
+      {% for category, factors in risk_factors.items() %}
+      <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;padding:1rem 1.5rem;">
+        <h2 style="font-size:1rem;color:var(--red);margin-bottom:0.8rem;">{{ category }}</h2>
+        {% for factor, scores in factors.items() %}
+        <div class="checkbox-grid" data-category="{{ category }}" data-factor="{{ factor }}" data-h="{{ scores.historic }}" data-r="{{ scores.recent }}">
+          <span style="font-size:0.9rem;">{{ factor }}
+            <span style="color:var(--muted);font-size:0.78rem;">(H:{{ scores.historic }} / R:{{ scores.recent }})</span>
+          </span>
+          <button type="button" class="timing-btn" data-timing="historic" onclick="toggleFactor(this)">Historic</button>
+          <button type="button" class="timing-btn" data-timing="recent" onclick="toggleFactor(this)">Recent</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+
+      <button type="button" class="btn btn-green" onclick="calculate()" style="width:100%;justify-content:center;padding:0.8rem;font-size:1rem;">
+        Calculate Score &amp; Pricing
+      </button>
+    </form>
+
+    <!-- Results panel -->
+    <div id="results" class="result-panel hidden">
+      <h3>Results</h3>
+      <div class="grid-3" style="margin-bottom:1rem;">
+        <div class="stat-box">
+          <div class="num" id="rScore" style="color:var(--green);">-</div>
+          <div class="label">Risk Score (max 30)</div>
+        </div>
+        <div class="stat-box">
+          <div id="rTier"><span class="badge badge-tier">-</span></div>
+          <div class="label" style="margin-top:0.5rem;">Tier</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="rPrice" style="color:var(--dark);">-</div>
+          <div class="label">Nightly Rate</div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Detail</th><th>Value</th></tr></thead>
+        <tbody id="rDetails"></tbody>
+      </table>
+      <h3 style="margin-top:1.5rem;">Score Breakdown</h3>
+      <table>
+        <thead><tr><th>Category</th><th>Factor</th><th>Timing</th><th style="text-align:right;">Score</th></tr></thead>
+        <tbody id="rBreakdown"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleFactor(btn) {
+  const row = btn.closest('.checkbox-grid');
+  const timing = btn.dataset.timing;
+  const otherTiming = timing === 'historic' ? 'recent' : 'historic';
+  const otherBtn = row.querySelector(`[data-timing="${otherTiming}"]`);
+
+  if (btn.classList.contains('active-h') || btn.classList.contains('active-r')) {
+    btn.classList.remove('active-h', 'active-r');
+  } else {
+    otherBtn.classList.remove('active-h', 'active-r');
+    btn.classList.add(timing === 'historic' ? 'active-h' : 'active-r');
+  }
+}
+
+function calculate() {
+  const factors = [];
+  document.querySelectorAll('.checkbox-grid').forEach(row => {
+    const hBtn = row.querySelector('[data-timing="historic"]');
+    const rBtn = row.querySelector('[data-timing="recent"]');
+    let timing = null;
+    if (hBtn.classList.contains('active-h')) timing = 'historic';
+    if (rBtn.classList.contains('active-r')) timing = 'recent';
+    if (timing) {
+      factors.push({
+        category: row.dataset.category,
+        factor: row.dataset.factor,
+        timing: timing,
+      });
+    }
+  });
+
+  const body = {
+    factors: factors,
+    property_type: document.getElementById('propertyType').value,
+    bills_included: document.getElementById('billsIncluded').value === 'yes',
+    double_manned: document.getElementById('doubleManned').value === 'yes',
+    client_name: document.getElementById('clientName').value,
+  };
+
+  fetch('/scorer/calculate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('rScore').textContent = data.total_score;
+    document.getElementById('rTier').innerHTML = `<span class="badge badge-tier">${data.tier_name}</span>`;
+
+    if (data.error) {
+      document.getElementById('rPrice').textContent = 'N/A';
+    } else {
+      document.getElementById('rPrice').textContent = data.nightly_low === data.nightly_high
+        ? `\u00A3${data.nightly_low}`
+        : `\u00A3${data.nightly_low}-\u00A3${data.nightly_high}`;
+    }
+
+    // Details table
+    let details = '';
+    if (data.client_name) details += `<tr><td>Client</td><td><strong>${data.client_name}</strong></td></tr>`;
+    details += `<tr><td>Property Type</td><td>${data.property_type}</td></tr>`;
+    details += `<tr><td>Bills Included</td><td>${data.bills_included ? 'Yes (+\u00A315/night)' : 'No'}</td></tr>`;
+    details += `<tr><td>Double-Manned</td><td>${data.double_manned ? 'Yes' : 'No'}</td></tr>`;
+    details += `<tr><td>Visit Profile</td><td>${data.visit_profile}</td></tr>`;
+    if (data.visit_rates) {
+      details += `<tr><td>Residency Visit Rate</td><td>\u00A3${data.visit_rates.residency.toFixed(2)}/visit</td></tr>`;
+      details += `<tr><td>Support Visit Rate</td><td>\u00A3${data.visit_rates.support.toFixed(2)}/visit</td></tr>`;
+    }
+    document.getElementById('rDetails').innerHTML = details;
+
+    // Breakdown table
+    let bd = '';
+    data.breakdown.forEach(b => {
+      const cls = b.timing === 'recent' ? 'badge-danger' : 'badge-warn';
+      bd += `<tr><td>${b.category}</td><td>${b.factor}</td>
+        <td><span class="badge ${cls}">${b.timing}</span></td>
+        <td style="text-align:right;font-weight:700;">${b.score}</td></tr>`;
+    });
+    if (!data.breakdown.length) bd = '<tr><td colspan="4" style="text-align:center;color:var(--muted);">No risk factors selected</td></tr>';
+    document.getElementById('rBreakdown').innerHTML = bd;
+
+    document.getElementById('results').scrollIntoView({behavior:'smooth'});
+  });
+}
+</script>
+{% endblock %}
