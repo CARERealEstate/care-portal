@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}CARE Portal{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="hero">
+    <h1><span>CARE</span> Operations Portal</h1>
+    <p>Creative Appeal Real Estate â tools for the supported living team</p>
+    <div class="hero-cards">
+      <div class="hero-card">
+        <h3>Risk Assessment Scorer</h3>
+        <p>Upload a referral risk assessment, answer a few questions, and get the tier, nightly rate, and visit profile instantly.</p>
+        <a href="/scorer" class="btn btn-green">Open Scorer</a>
+      </div>
+      <div class="hero-card">
+        <h3>Report Tracker</h3>
+        <p>Upload support and residency reports. Track how many are done per client each week so nothing gets missed.</p>
+        <a href="/tracker" class="btn btn-outline">Open Tracker</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
