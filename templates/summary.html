@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Weekly Summary â CARE Portal{% endblock %}
+{% block content %}
+<div class="container">
+
+  <!-- Upload area -->
+  <div class="card" id="uploadCard">
+    <h2>Weekly Report Summary</h2>
+    <p style="color:var(--muted);margin-bottom:1.2rem;">
+      Upload your team's .docx report files and get a formatted weekly summary PDF â ready to send to the council or your team.
+    </p>
+
+    <div id="dropZone" style="border:2px dashed #d1d5db;border-radius:12px;padding:2.5rem;text-align:center;cursor:pointer;transition:all 0.2s;background:#fafafa;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">ð</div>
+      <div style="font-weight:600;color:var(--dark);margin-bottom:0.3rem;">Drop .docx files here or click to browse</div>
+      <div style="font-size:0.85rem;color:var(--muted);">Upload all support &amp; residency reports for the week</div>
+      <input type="file" id="fileInput" multiple accept=".docx" style="display:none;">
+    </div>
+
+    <!-- File list -->
+    <div id="fileList" style="margin-top:1rem;display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <label style="margin-bottom:0;">Files ready (<span id="fileCount">0</span>)</label>
+        <button type="button" class="btn btn-sm btn-outline" onclick="clearFiles()">Clear All</button>
+      </div>
+      <div id="fileItems" style="max-height:200px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Generate button -->
+    <div style="margin-top:1.2rem;display:flex;gap:1rem;align-items:center;">
+      <button type="button" class="btn btn-green" id="generateBtn" onclick="generateSummary()" disabled style="padding:0.7rem 2rem;font-size:1rem;">
+        Generate Summary PDF
+      </button>
+      <div id="status" style="font-size:0.9rem;color:var(--muted);display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Preview area (shown after generation) -->
+  <div class="card" id="previewCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h2 style="margin-bottom:0;">Summary Preview</h2>
+      <div style="display:flex;gap:0.5rem;">
+        <a id="downloadBtn" href="#" class="btn btn-green" style="text-decoration:none;">Download PDF</a>
+        <button type="button" class="btn btn-outline" onclick="resetPage()">New Summary</button>
+      </div>
+    </div>
+    <div id="previewContent"></div>
+  </div>
+
+</div>
+
+<script>
+let selectedFiles = [];
+
+// Drop zone
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = 'var(--green)';
+  dropZone.style.background = '#f0faf1';
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.style.borderColor = '#d1d5db';
+  dropZone.style.background = '#fafafa';
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = '#d1d5db';
+  dropZone.style.background = '#fafafa';
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => {
+  addFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+function addFiles(files) {
+  for (let f of files) {
+    if (f.name.toLowerCase().endsWith('.docx')) {
+      selectedFiles.push(f);
+    }
+  }
+  renderFileList();
+}
+
+function clearFiles() {
+  selectedFiles = [];
+  renderFileList();
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  const items = document.getElementById('fileItems');
+  const count = document.getElementById('fileCount');
+  const btn = document.getElementById('generateBtn');
+
+  if (selectedFiles.length === 0) {
+    list.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+
+  list.style.display = 'block';
+  count.textContent = selectedFiles.length;
+  btn.disabled = false;
+
+  items.innerHTML = selectedFiles.map((f, i) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.6rem;background:#f8f9fa;border-radius:6px;margin-bottom:0.3rem;font-size:0.88rem;">
+      <span>ð ${f.name}</span>
+      <button onclick="removeFile(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-weight:700;font-size:1rem;">&times;</button>
+    </div>`
+  ).join('');
+}
+
+function generateSummary() {
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  status.style.display = 'inline';
+  status.textContent = 'Reading reports and building PDF...';
+
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append('files', f));
+
+  fetch('/summary/generate', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        status.textContent = data.error;
+        status.style.color = 'var(--red)';
+        btn.disabled = false;
+        btn.textContent = 'Generate Summary PDF';
+        return;
+      }
+
+      // Show preview
+      document.getElementById('uploadCard').style.display = 'none';
+      const preview = document.getElementById('previewCard');
+      preview.style.display = 'block';
+      document.getElementById('downloadBtn').href = '/summary/download/' + data.filename;
+
+      // Render preview
+      let html = `<div style="padding:1rem;background:#f8f9fa;border-radius:8px;margin-bottom:1rem;">
+        <div style="font-size:0.85rem;color:var(--muted);">${data.file_count} report(s) processed across ${data.client_count} client(s)</div>
+      </div>`;
+
+      data.clients.forEach(c => {
+        html += `<div style="border-left:3px solid var(--green);padding:0.8rem 1rem;margin-bottom:1rem;background:#fafafa;border-radius:0 8px 8px 0;">
+          <div style="font-weight:700;color:var(--dark);font-size:1.05rem;">${c.name}</div>`;
+
+        c.reports.forEach(r => {
+          html += `<div style="margin-top:0.6rem;">
+            <div style="font-size:0.82rem;color:var(--green);font-weight:600;">${r.type} â ${r.date}</div>
+            <div style="font-size:0.9rem;color:var(--text);margin-top:0.2rem;">${r.summary}</div>
+          </div>`;
+        });
+
+        html += `</div>`;
+      });
+
+      document.getElementById('previewContent').innerHTML = html;
+    })
+    .catch(() => {
+      status.textContent = 'Something went wrong. Please try again.';
+      status.style.color = 'var(--red)';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Generate Summary PDF';
+    });
+}
+
+function resetPage() {
+  selectedFiles = [];
+  renderFileList();
+  document.getElementById('uploadCard').style.display = 'block';
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('status').style.display = 'none';
+}
+</script>
+{% endblock %}
