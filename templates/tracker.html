@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Report Tracker â CARE Portal{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="card">
+    <h2>Report Tracker</h2>
+    <p style="color:var(--muted);margin-bottom:1rem;">Track support &amp; residency reports per client each week.</p>
+
+    <!-- Week selector -->
+    <div class="form-row" style="margin-bottom:1.5rem;">
+      <div class="form-group">
+        <label>Select Week</label>
+        <select id="weekSelect" onchange="location.href='/tracker?week='+this.value">
+          {% for w in weeks %}
+          <option value="{{ w.start }}" {{ 'selected' if w.start == selected_week else '' }}>{{ w.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex;align-items:end;gap:0.5rem;">
+        <span class="badge badge-tier" style="font-size:0.9rem;">{{ week_label }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="grid-3" style="margin-bottom:1.5rem;">
+    {% set total_support_done = clients | sum(attribute='support_done') %}
+    {% set total_support_req = clients | sum(attribute='support_required') %}
+    {% set total_res_done = clients | sum(attribute='residency_done') %}
+    {% set total_res_req = clients | sum(attribute='residency_required') %}
+    <div class="card" style="text-align:center;margin-bottom:0;">
+      <div style="font-size:1.8rem;font-weight:700;color:var(--green);">{{ total_support_done }}/{{ total_support_req }}</div>
+      <div style="font-size:0.82rem;color:var(--muted);">Support Reports</div>
+      <div class="progress-bar" style="margin-top:0.5rem;">
+        {% set sp = (total_support_done / total_support_req * 100) if total_support_req > 0 else 0 %}
+        <div class="fill" style="width:{{ sp }}%;background:{{ 'var(--green)' if sp >= 100 else '#ffc107' if sp >= 50 else 'var(--red)' }};"></div>
+      </div>
+    </div>
+    <div class="card" style="text-align:center;margin-bottom:0;">
+      <div style="font-size:1.8rem;font-weight:700;color:var(--dark);">{{ total_res_done }}/{{ total_res_req }}</div>
+      <div style="font-size:0.82rem;color:var(--muted);">Residency Reports</div>
+      <div class="progress-bar" style="margin-top:0.5rem;">
+        {% set rp = (total_res_done / total_res_req * 100) if total_res_req > 0 else 0 %}
+        <div class="fill" style="width:{{ rp }}%;background:{{ 'var(--green)' if rp >= 100 else '#ffc107' if rp >= 50 else 'var(--red)' }};"></div>
+      </div>
+    </div>
+    <div class="card" style="text-align:center;margin-bottom:0;">
+      {% set total_done = total_support_done + total_res_done %}
+      {% set total_req = total_support_req + total_res_req %}
+      <div style="font-size:1.8rem;font-weight:700;color:{{ 'var(--green)' if total_done >= total_req else 'var(--red)' }};">{{ total_done }}/{{ total_req }}</div>
+      <div style="font-size:0.82rem;color:var(--muted);">Total Reports</div>
+      <div class="progress-bar" style="margin-top:0.5rem;">
+        {% set tp = (total_done / total_req * 100) if total_req > 0 else 0 %}
+        <div class="fill" style="width:{{ tp }}%;background:{{ 'var(--green)' if tp >= 100 else '#ffc107' if tp >= 50 else 'var(--red)' }};"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client table -->
+  <div class="card">
+    <h2 style="font-size:1.1rem;">Per-Client Breakdown</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Address</th>
+          <th style="text-align:center;">Support</th>
+          <th style="text-align:center;">Residency</th>
+          <th style="text-align:center;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clients %}
+        {% set s_pct = (c.support_done / c.support_required * 100) if c.support_required > 0 else 100 %}
+        {% set r_pct = (c.residency_done / c.residency_required * 100) if c.residency_required > 0 else 100 %}
+        {% set all_done = (c.support_done >= c.support_required) and (c.residency_done >= c.residency_required) %}
+        <tr>
+          <td><strong>{{ c.name }}</strong></td>
+          <td style="font-size:0.82rem;color:var(--muted);">{{ c.address }}</td>
+          <td style="text-align:center;">
+            <span style="font-weight:700;font-size:1rem;color:{{ 'var(--green)' if s_pct >= 100 else '#ffc107' if s_pct >= 50 else 'var(--red)' }};">
+              {{ c.support_done }}/{{ c.support_required }}
+            </span>
+            <div class="progress-bar" style="width:80px;margin:0.3rem auto 0;">
+              <div class="fill" style="width:{{ [s_pct, 100] | min }}%;background:{{ 'var(--green)' if s_pct >= 100 else '#ffc107' if s_pct >= 50 else 'var(--red)' }};"></div>
+            </div>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-weight:700;font-size:1rem;color:{{ 'var(--green)' if r_pct >= 100 else '#ffc107' if r_pct >= 50 else 'var(--red)' }};">
+              {{ c.residency_done }}/{{ c.residency_required }}
+            </span>
+            <div class="progress-bar" style="width:80px;margin:0.3rem auto 0;">
+              <div class="fill" style="width:{{ [r_pct, 100] | min }}%;background:{{ 'var(--green)' if r_pct >= 100 else '#ffc107' if r_pct >= 50 else 'var(--red)' }};"></div>
+            </div>
+          </td>
+          <td style="text-align:center;">
+            {% if all_done %}
+              <span class="badge badge-ok">Complete</span>
+            {% elif s_pct > 0 or r_pct > 0 %}
+              <span class="badge badge-warn">In Progress</span>
+            {% else %}
+              <span class="badge badge-danger">Missing</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Upload forms -->
+  <div class="grid-2">
+    <!-- Single upload -->
+    <div class="card">
+      <h2 style="font-size:1.1rem;">Upload Report</h2>
+      <form action="/tracker/upload" method="POST" enctype="multipart/form-data">
+        <div class="form-group" style="margin-bottom:0.8rem;">
+          <label>Client</label>
+          <select name="client" required>
+            {% for c in clients %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0.8rem;">
+          <label>Report Type</label>
+          <select name="report_type" required>
+            <option value="support">Support Visit</option>
+            <option value="residency">Residency Visit</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0.8rem;">
+          <label>Date</label>
+          <input type="date" name="report_date" required>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>File (optional)</label>
+          <input type="file" name="files" multiple>
+        </div>
+        <button type="submit" class="btn btn-green" style="width:100%;justify-content:center;">Upload Report</button>
+      </form>
+    </div>
+
+    <!-- Bulk upload -->
+    <div class="card">
+      <h2 style="font-size:1.1rem;">Bulk Upload</h2>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:1rem;">
+        Upload multiple files at once. The system auto-detects client, type, and date from filenames.<br>
+        <strong>Naming format:</strong> <code>Residency_M.C_31.03.26.docx</code>
+      </p>
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>Select Files</label>
+        <input type="file" id="bulkFiles" multiple>
+      </div>
+      <button type="button" class="btn btn-green" onclick="bulkUpload()" style="width:100%;justify-content:center;">Bulk Upload</button>
+      <div id="bulkResult" style="margin-top:0.8rem;font-size:0.9rem;display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Reset -->
+  <div style="text-align:right;margin-top:0.5rem;">
+    <form action="/tracker/reset" method="POST" onsubmit="return confirm('Reset all report data? This cannot be undone.');">
+      <button type="submit" class="btn btn-red btn-sm">Reset All Data</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function bulkUpload() {
+  const files = document.getElementById('bulkFiles').files;
+  if (!files.length) return alert('Select files first.');
+
+  const fd = new FormData();
+  for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+
+  fetch('/tracker/bulk-upload', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('bulkResult');
+      el.style.display = 'block';
+      if (data.added === data.total_files) {
+        el.innerHTML = `<span class="badge badge-ok">All ${data.added} files matched and uploaded.</span>`;
+      } else {
+        el.innerHTML = `<span class="badge badge-warn">${data.added}/${data.total_files} files matched. Rename unmatched files and retry.</span>`;
+      }
+      setTimeout(() => location.reload(), 1500);
+    })
+    .catch(() => {
+      document.getElementById('bulkResult').style.display = 'block';
+      document.getElementById('bulkResult').innerHTML = '<span class="badge badge-danger">Upload failed. Try again.</span>';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Bulk Upload';
+    });
+}
+</script>
+{% endblock %}
